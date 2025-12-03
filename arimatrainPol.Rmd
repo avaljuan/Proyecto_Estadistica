@@ -3,6 +3,31 @@ title: "arimatrainPol"
 output: html_document
 ---
 
+Cargamos la función de evaluación.
+```{r}
+getPred_ts<- function(Xtrain, Xtest, getPredFunc){
+  
+  H <- nrow(Xtest)
+  mu_hat <- matrix(NA, H, 5)
+  se_hat <- matrix(NA, H, 5)
+  
+
+  X_test_past <- Xtest[0,]
+  for (h in seq_len(H)) {
+    for (i in 1:5){
+      # update model state with data up to t-1 (parameters fixed)
+      pred = do.call(getPredFunc, list(Xtrain[,i], X_test_past[,i]))
+      mu_hat[h,i] <- pred$mu_hat
+      se_hat[h,i] <- pred$se_hat
+    }
+    X_test_past <- Xtest[1:h,,drop=FALSE]
+  }
+  return(list(mu_hat=mu_hat, se_hat=se_hat))
+}
+```
+
+
+
 Importamos el dataframe.
 ```{r}
 library(readr)
