@@ -22,7 +22,7 @@ Importamos el dataframe.
 library(readr)
 library(forecast)
 
-df_train <- read_csv("data/stock_returns_train.csv")
+df_train <- read_csv("stock_returns_train.csv")
 ```
 Pasamos a formato serie temporal.
 ```{r}
