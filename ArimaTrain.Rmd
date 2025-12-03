@@ -1,0 +1,345 @@
+---
+title: "ArimaTrain"
+author: "Joan Merlos Cremades"
+date: "2025-10-31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+* **Ajustar modelos ARIMA para los 5 'activos'**
+
+
+* **Evaluar el 'one-step ahead' en periodo 'test' sin re-estimar theta y phi**
+
+
+* **Evaluar re-estimado theta y phi cada nuevo mes**
+
+Importamos el dataframe.
+```{r}
+library(readr)
+library(forecast)
+
+df_train <- read_csv("data/stock_returns_train.csv")
+```
+Pasamos a formato serie temporal.
+```{r}
+df_ts <- ts(df_train, frequency=12)
+
+df_train <- ts(df_ts[1:(7*12),], frequency=12)
+df_test <- ts(df_ts[(7*12+1):length(df_ts[,1]),], frequency=12)
+```
+
+Ploteamos los resultados.
+```{r}
+plot(df_train)
+```
+
+## Serie 1
+
+```{r}
+serie <- 1
+
+# Observamos la estacionalidad
+
+boxplot(df_train[,serie] ~ cycle(df_train[,serie]))
+
+# Diferenciamos la serie hasta que sea estacionalidad
+
+serie_dif <- diff(df_train[,serie],12)
+
+serie_dif <- diff(serie_dif,12)
+
+boxplot(serie_dif ~ cycle(serie_dif))
+        
+# Nos quedamos con la serie estacionaria
+
+new_serie <- df_train[,serie]
+
+# Determinamos el valor q con la acf
+
+acf(new_serie)
+
+# Determinamos el valor p con la pacf
+
+pacf(new_serie)
+```
+Para la serie 1 determinamos que esta no tiene tendencia, q = 2 y p = 2.
+
+Ahora comprovamos con el autoarima.
+```{r}
+summary(auto.arima(df_train[,serie]))
+```
+El auto.arima ha encontrado que los valores indicados son (p,d,q) = (0,0,0).
+
+Ahora construimos la nueva serie arima y nos podemos a predecir para los dos casos.
+```{r}
+x_n <- ts(df_train[,serie],frequency=12)
+p_n <- ts(df_train[,serie],frequency=12)
+h <- 36
+j <- 1
+
+for (i in 1:h){
+  
+  upd <- Arima(x_n,order = c(0, 0, 0), 
+              seasonal = c(0, 0, 0))
+  
+  pred <- forecast(upd, h = 1)$mean
+    
+  x_n <- ts(c(x_n, df_test[j,serie]),frequency=12)
+  p_n <- ts(c(p_n, pred),frequency=12)
+  
+  j <- j + 1
+}
+
+ts.plot(p_n,df_ts[,serie],col = c("blue", "red"))
+legend("topleft", legend = c("Predicha", "Real"), col = c("blue", "red"), lty = c(1, 2))
+```
+
+## Serie 2
+
+```{r}
+serie <- 2
+
+# Observamos la estacionalidad
+
+boxplot(df_train[,serie] ~ cycle(df_train[,serie]))
+
+# Diferenciamos la serie hasta que sea estacionalidad
+
+serie_dif <- diff(df_train[,serie],12)
+
+serie_dif <- diff(serie_dif,12)
+
+boxplot(serie_dif ~ cycle(serie_dif))
+        
+# Nos quedamos con la serie estacionaria
+
+new_serie <- df_train[,serie]
+
+# Determinamos el valor q con la acf
+
+acf(new_serie)
+
+# Determinamos el valor p con la pacf
+
+pacf(new_serie)
+```
+Para la serie 1 determinamos que esta no tiene tendencia, q = 1 y p = 1.
+
+Ahora comprovamos con el autoarima.
+```{r}
+summary(auto.arima(df_train[,serie]))
+```
+El auto.arima ha encontrado que los valores indicados son (p,d,q) = (1,0,1).
+
+Ahora construimos la nueva serie arima y nos podemos a predecir para los dos casos.
+```{r}
+x_n <- ts(df_train[,serie],frequency=12)
+p_n <- ts(df_train[,serie],frequency=12)
+h <- 36
+j <- 1
+
+for (i in 1:h){
+  
+  upd <- Arima(x_n,order = c(1, 0, 2), 
+              seasonal = c(0, 0, 0))
+  
+  pred <- forecast(upd, h = 1)$mean
+    
+  x_n <- ts(c(x_n, df_test[j,serie]),frequency=12)
+  p_n <- ts(c(p_n, pred),frequency=12)
+  
+  j <- j + 1
+}
+
+ts.plot(p_n,df_ts[,serie],col = c("blue", "red"))
+legend("topleft", legend = c("Predicha", "Real"), col = c("blue", "red"), lty = c(1, 2))
+```
+
+## Serie 3
+
+```{r}
+serie <- 3
+
+# Observamos la estacionalidad
+
+boxplot(df_train[,serie] ~ cycle(df_train[,serie]))
+
+# Diferenciamos la serie hasta que sea estacionalidad
+
+serie_dif <- diff(df_train[,serie],12)
+
+serie_dif <- diff(serie_dif,12)
+
+boxplot(serie_dif ~ cycle(serie_dif))
+        
+# Nos quedamos con la serie estacionaria
+
+new_serie <- df_train[,serie]
+
+# Determinamos el valor q con la acf
+
+acf(new_serie)
+
+# Determinamos el valor p con la pacf
+
+pacf(new_serie)
+```
+Para la serie 1 determinamos que esta no tiene tendencia, q = 2 y p = 2.
+
+Ahora comprovamos con el autoarima.
+```{r}
+summary(auto.arima(df_train[,serie]))
+```
+El auto.arima ha encontrado que los valores indicados son (p,d,q) = (0,1,1).
+
+Ahora construimos la nueva serie arima y nos podemos a predecir para los dos casos.
+```{r}
+x_n <- ts(df_train[,serie],frequency=12)
+p_n <- ts(df_train[,serie],frequency=12)
+h <- 36
+j <- 1
+
+for (i in 1:h){
+  
+  upd <- Arima(x_n,order = c(0, 1, 1), 
+              seasonal = c(0, 0, 0))
+  
+  pred <- forecast(upd, h = 1)$mean
+    
+  x_n <- ts(c(x_n, df_test[j,serie]),frequency=12)
+  p_n <- ts(c(p_n, pred),frequency=12)
+  
+  j <- j + 1
+}
+
+ts.plot(p_n,df_ts[,serie],col = c("blue", "red"))
+legend("topleft", legend = c("Predicha", "Real"), col = c("blue", "red"), lty = c(1, 2))
+```
+
+## Serie 4
+
+```{r}
+serie <- 4
+
+# Observamos la estacionalidad
+
+boxplot(df_train[,serie] ~ cycle(df_train[,serie]))
+
+# Diferenciamos la serie hasta que sea estacionalidad
+
+serie_dif <- diff(df_train[,serie],12)
+
+serie_dif <- diff(serie_dif,12)
+
+boxplot(serie_dif ~ cycle(serie_dif))
+        
+# Nos quedamos con la serie estacionaria
+
+new_serie <- df_train[,serie]
+
+# Determinamos el valor q con la acf
+
+acf(new_serie)
+
+# Determinamos el valor p con la pacf
+
+pacf(new_serie)
+```
+Para la serie 1 determinamos que esta no tiene tendencia, q = 1 y p = 0.
+
+Ahora comprovamos con el autoarima.
+```{r}
+summary(auto.arima(df_train[,serie]))
+```
+El auto.arima ha encontrado que los valores indicados son (p,d,q) = (1,0,0).
+
+Ahora construimos la nueva serie arima y nos podemos a predecir para los dos casos.
+```{r}
+x_n <- ts(df_train[,serie],frequency=12)
+p_n <- ts(df_train[,serie],frequency=12)
+h <- 36
+j <- 1
+
+for (i in 1:h){
+  
+  upd <- Arima(x_n,order = c(1, 0, 0), 
+              seasonal = c(0, 0, 0))
+  
+  pred <- forecast(upd, h = 1)$mean
+    
+  x_n <- ts(c(x_n, df_test[j,serie]),frequency=12)
+  p_n <- ts(c(p_n, pred),frequency=12)
+  
+  j <- j + 1
+}
+
+ts.plot(p_n,df_ts[,serie],col = c("blue", "red"))
+legend("topleft", legend = c("Predicha", "Real"), col = c("blue", "red"), lty = c(1, 2))
+```
+
+## Serie 5
+
+```{r}
+serie <- 5
+
+# Observamos la estacionalidad
+
+boxplot(df_train[,serie] ~ cycle(df_train[,serie]))
+
+# Diferenciamos la serie hasta que sea estacionalidad
+
+serie_dif <- diff(df_train[,serie],12)
+
+serie_dif <- diff(serie_dif,12)
+
+boxplot(serie_dif ~ cycle(serie_dif))
+        
+# Nos quedamos con la serie estacionaria
+
+new_serie <- df_train[,serie]
+
+# Determinamos el valor q con la acf
+
+acf(new_serie)
+
+# Determinamos el valor p con la pacf
+
+pacf(new_serie)
+```
+Para la serie 1 determinamos que esta no tiene tendencia, q = 0 y p = 1.
+
+Ahora comprovamos con el autoarima.
+```{r}
+summary(auto.arima(df_train[,serie]))
+```
+El auto.arima ha encontrado que los valores indicados son (p,d,q) = (0,0,2).
+
+Ahora construimos la nueva serie arima y nos podemos a predecir para los dos casos.
+```{r}
+x_n <- ts(df_train[,serie],frequency=12)
+p_n <- ts(df_train[,serie],frequency=12)
+h <- 36
+j <- 1
+
+for (i in 1:h){
+  
+  upd <- Arima(x_n,order = c(0, 0, 2), 
+              seasonal = c(0, 0, 0))
+  
+  pred <- forecast(upd, h = 1)$mean
+    
+  x_n <- ts(c(x_n, df_test[j,serie]),frequency=12)
+  p_n <- ts(c(p_n, pred),frequency=12)
+  
+  j <- j + 1
+}
+
+ts.plot(p_n,df_ts[,serie],col = c("blue", "red"))
+legend("topleft", legend = c("Predicha", "Real"), col = c("blue", "red"), lty = c(1, 2))
+```
+
+
