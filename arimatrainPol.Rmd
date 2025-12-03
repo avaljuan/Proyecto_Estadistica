@@ -5,7 +5,7 @@ output: html_document
 
 Cargamos la función de evaluación.
 ```{r}
-getPred_ts<- function(Xtrain, Xtest, getPredFunc){
+getPred_ts<- function(Xtrain, Xtest, getPredFunc, models){
   
   H <- nrow(Xtest)
   mu_hat <- matrix(NA, H, 5)
@@ -16,7 +16,8 @@ getPred_ts<- function(Xtrain, Xtest, getPredFunc){
   for (h in seq_len(H)) {
     for (i in 1:5){
       # update model state with data up to t-1 (parameters fixed)
-      pred = do.call(getPredFunc, list(Xtrain[,i], X_test_past[,i]))
+      pred <- do.call(getPredFunc, list(Xtrain[,i], X_test_past[,i], models[[i]]))
+      print(pred)
       mu_hat[h,i] <- pred$mu_hat
       se_hat[h,i] <- pred$se_hat
     }
@@ -49,30 +50,23 @@ plot(df_train)
 ```
 Crear funcion OneStepAhead
 ```{r}
-oneStepAhead <- function(X_history, models) {
-  # X_history: matriz o data.frame con 5 columnas (activos) y t filas (historial hasta t)
-  # models: lista de 5 modelos ARIMA ya entrenados
+OSA <- function(train_data, new_data, model) {
   
-  n_assets <- 5
-  mu_t <- numeric(n_assets)
-  sigma2_t <- numeric(n_assets)
-  
-  for (i in 1:n_assets) {
-    # Extraer la serie histórica del activo i
-    history_i <- X_history[, i]
-    
-    # Reajustar el modelo con el historial actualizado (opcional, depende de implementación)
-    # O simplemente predecir con el modelo existente
-    pred <- forecast(models[[i]], h = 1, xreg = NULL)  # ajustar si hay regresores
-    
-    mu_t[i] <- pred$mean
-    sigma2_t[i] <- pred$model$sigma2  # varianza residual
+  # 1. Si hay datos nuevos (X_test_past no está vacío), actualizamos el modelo
+  # Arima() (con mayúscula) permite aplicar un modelo existente a nuevos datos
+  if(length(new_data) > 0){
+     # Unimos los datos históricos con los nuevos para el contexto
+     # O simplemente usamos Arima para filtrar los nuevos datos usando el modelo previo
+     model <- Arima(c(train_data, new_data), model=model)
   }
   
-  return(list(
-    mu = mu_t,        # E[X_t|X_{1:t-1}] para los 5 activos
-    sigma2 = sigma2_t # V[X_t|X_{1:t-1}] para los 5 activos
-  ))
+  # 2. Predecimos
+  pred <- forecast(model, h = 1)
+  
+  # 3. Retornamos vector (Corregimos el error de mu_t[i] que tenías dentro)
+  vec <- data.frame(c('mu_hat' = pred$mean, 'se_hat' = mean(pred$model$sigma2)))
+  
+  return(vec)
 }
 ```
 
@@ -99,33 +93,8 @@ for (serie in 1:5) {
 Simular periodo test con oneStepAhead
 
 ```{r}
-# Preparar estructuras para almacenar resultados
-n_test <- nrow(df_test)
-all_mu <- matrix(NA, nrow = n_test, ncol = 5)
-all_sigma2 <- matrix(NA, nrow = n_test, ncol = 5)
-actual_values <- matrix(NA, nrow = n_test, ncol = 5)
-
-# Historial inicial: todos los datos de entrenamiento
-current_history <- df_train
-
-for (t in 1:n_test) {
-  # 1. Predecir t+1 usando historial hasta t
-  pred <- oneStepAhead(current_history, models)
-  
-  # 2. Guardar predicciones
-  all_mu[t, ] <- pred$mu
-  all_sigma2[t, ] <- pred$sigma2
-  
-  # 3. Guardar valor real (para evaluación)
-  actual_values[t, ] <- df_test[t, ]
-  
-  # 4. Actualizar historial añadiendo el valor real
-  current_history <- rbind(current_history, df_test[t, ])
-}
+getPred_ts(df_train,df_test,OSA, models)
 ```
 
-```{r}
-
-```
 
 
