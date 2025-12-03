@@ -124,24 +124,8 @@ for (t in 1:n_test) {
 }
 ```
 
-Calcular métricas de evaluación (MAPE)
 ```{r}
-# Calcular MAPE para cada activo
-mape_per_asset <- numeric(5)
 
-for (i in 1:5) {
-  errors <- abs((actual_values[, i] - all_mu[, i]) / actual_values[, i])
-  mape_per_asset[i] <- mean(errors[is.finite(errors)], na.rm = TRUE) * 100
-}
-
-# MAPE promedio (métrica 1 del proyecto)
-mape_promedio <- mean(mape_per_asset)
-cat(sprintf("MAPE promedio: %.2f%%\n", mape_promedio))
-
-# Mostrar MAPE por activo
-for (i in 1:5) {
-  cat(sprintf("Activo %d: MAPE = %.2f%%\n", i, mape_per_asset[i]))
-}
 ```
 
 
