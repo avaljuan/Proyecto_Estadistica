@@ -44,7 +44,7 @@ serie <- 1
 
 # Observamos la estacionalidad
 
-boxplot(df_train[,serie] ~ cycle(df_train[,serie]))
+#boxplot(df_train[,serie] ~ cycle(df_train[,serie]))
 
 # Diferenciamos la serie hasta que sea estacionalidad
 
@@ -52,7 +52,7 @@ serie_dif <- diff(df_train[,serie],12)
 
 serie_dif <- diff(serie_dif,12)
 
-boxplot(serie_dif ~ cycle(serie_dif))
+#boxplot(serie_dif ~ cycle(serie_dif))
         
 # Nos quedamos con la serie estacionaria
 
@@ -105,7 +105,7 @@ serie <- 2
 
 # Observamos la estacionalidad
 
-boxplot(df_train[,serie] ~ cycle(df_train[,serie]))
+#boxplot(df_train[,serie] ~ cycle(df_train[,serie]))
 
 # Diferenciamos la serie hasta que sea estacionalidad
 
@@ -113,7 +113,7 @@ serie_dif <- diff(df_train[,serie],12)
 
 serie_dif <- diff(serie_dif,12)
 
-boxplot(serie_dif ~ cycle(serie_dif))
+#boxplot(serie_dif ~ cycle(serie_dif))
         
 # Nos quedamos con la serie estacionaria
 
@@ -133,7 +133,7 @@ Ahora comprovamos con el autoarima.
 ```{r}
 summary(auto.arima(df_train[,serie]))
 ```
-El auto.arima ha encontrado que los valores indicados son (p,d,q) = (1,0,1).
+El auto.arima ha encontrado que los valores indicados son (p,d,q) = (1,0,2).
 
 Ahora construimos la nueva serie arima y nos podemos a predecir para los dos casos.
 ```{r}
@@ -144,7 +144,7 @@ j <- 1
 
 for (i in 1:h){
   
-  upd <- Arima(x_n,order = c(1, 0, 2), 
+  upd <- Arima(x_n,order = c(1,0,2), 
               seasonal = c(0, 0, 0))
   
   pred <- forecast(upd, h = 1)$mean
@@ -187,6 +187,7 @@ acf(new_serie)
 # Determinamos el valor p con la pacf
 
 pacf(new_serie)
+
 ```
 Para la serie 1 determinamos que esta no tiene tendencia, q = 2 y p = 2.
 
@@ -205,7 +206,7 @@ j <- 1
 
 for (i in 1:h){
   
-  upd <- Arima(x_n,order = c(0, 1, 1), 
+  upd <- Arima(x_n,order = c(2, 0, 2), 
               seasonal = c(0, 0, 0))
   
   pred <- forecast(upd, h = 1)$mean
