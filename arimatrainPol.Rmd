@@ -17,12 +17,24 @@ getPred_ts<- function(Xtrain, Xtest, getPredFunc, models){
     for (i in 1:5){
       # update model state with data up to t-1 (parameters fixed)
       pred <- do.call(getPredFunc, list(Xtrain[,i], X_test_past[,i], models[[i]]))
-      print(pred)
       mu_hat[h,i] <- pred$mu_hat
       se_hat[h,i] <- pred$se_hat
     }
     X_test_past <- Xtest[1:h,,drop=FALSE]
   }
+  return(list(mu_hat=mu_hat, se_hat=se_hat))
+}
+
+getPred <- function(x_train, x_test_past, mod){
+  x_past <- c(x_train, x_test_past)
+  fit_upd <- Arima(x_past, model = mod)
+  fc <- forecast::forecast(fit_upd, h = 1)
+  mu_hat  <- as.numeric(fc$mean[1])
+  z80 <- qnorm(0.8)
+  se_from_up <- (fc$upper[,"80%"][1] - fc$mean[1]) / z80
+  se_from_lo <- (fc$mean[1]  - fc$lower[,"80%"][1]) / z80
+  se_hat_aux <- pmax(se_from_up, se_from_lo) 
+  se_hat  <- as.numeric(se_hat_aux)
   return(list(mu_hat=mu_hat, se_hat=se_hat))
 }
 ```
@@ -48,27 +60,6 @@ Ploteamos los resultados.
 ```{r}
 plot(df_train)
 ```
-Crear funcion OneStepAhead
-```{r}
-OSA <- function(train_data, new_data, model) {
-  
-  # 1. Si hay datos nuevos (X_test_past no está vacío), actualizamos el modelo
-  # Arima() (con mayúscula) permite aplicar un modelo existente a nuevos datos
-  if(length(new_data) > 0){
-     # Unimos los datos históricos con los nuevos para el contexto
-     # O simplemente usamos Arima para filtrar los nuevos datos usando el modelo previo
-     model <- Arima(c(train_data, new_data), model=model)
-  }
-  
-  # 2. Predecimos
-  pred <- forecast(model, h = 1)
-  
-  # 3. Retornamos vector (Corregimos el error de mu_t[i] que tenías dentro)
-  vec <- data.frame(c('mu_hat' = pred$mean, 'se_hat' = mean(pred$model$sigma2)))
-  
-  return(vec)
-}
-```
 
 Entrenar modelos finales y guardarlos
 
@@ -93,7 +84,7 @@ for (serie in 1:5) {
 Simular periodo test con oneStepAhead
 
 ```{r}
-getPred_ts(df_train,df_test,OSA, models)
+df <- data.frame(getPred_ts(df_train,df_test,getPred,models))
 ```
 
 
