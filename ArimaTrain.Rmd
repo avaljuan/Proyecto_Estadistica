@@ -28,8 +28,8 @@ Pasamos a formato serie temporal.
 ```{r}
 df_ts <- ts(df_train, frequency=12)
 
-df_train <- ts(df_ts[1:(7*12),], frequency=12)
-df_test <- ts(df_ts[(7*12+1):length(df_ts[,1]),], frequency=12)
+df_train <- ts(df_ts[1:(9*12),], frequency=12)
+df_test <- ts(df_ts[(9*12+1):length(df_ts[,1]),], frequency=12)
 ```
 
 Ploteamos los resultados.
@@ -72,6 +72,10 @@ Ahora comprovamos con el autoarima.
 ```{r}
 summary(auto.arima(df_train[,serie]))
 ```
+```{r}
+checkresiduals(auto.arima(df_train[,serie]))
+```
+
 El auto.arima ha encontrado que los valores indicados son (p,d,q) = (0,0,0).
 
 Ahora construimos la nueva serie arima y nos podemos a predecir para los dos casos.
@@ -133,18 +137,31 @@ Ahora comprovamos con el autoarima.
 ```{r}
 summary(auto.arima(df_train[,serie]))
 ```
+<<<<<<< HEAD
 El auto.arima ha encontrado que los valores indicados son (p,d,q) = (1,0,2).
+=======
+
+```{r}
+checkresiduals(auto.arima(df_train[,serie]))
+```
+
+El auto.arima ha encontrado que los valores indicados son (p,d,q) = (1,0,1).
+>>>>>>> e6273a3da3ef18f245c1c313db08de3e582489b7
 
 Ahora construimos la nueva serie arima y nos podemos a predecir para los dos casos.
 ```{r}
 x_n <- ts(df_train[,serie],frequency=12)
 p_n <- ts(df_train[,serie],frequency=12)
-h <- 36
+h <- 12
 j <- 1
 
 for (i in 1:h){
   
+<<<<<<< HEAD
   upd <- Arima(x_n,order = c(1,0,2), 
+=======
+  upd <- Arima(x_n,order = c(1, 0, 1), 
+>>>>>>> e6273a3da3ef18f245c1c313db08de3e582489b7
               seasonal = c(0, 0, 0))
   
   pred <- forecast(upd, h = 1)$mean

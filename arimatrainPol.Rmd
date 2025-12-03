@@ -1,0 +1,122 @@
+---
+title: "arimatrainPol"
+output: html_document
+---
+
+Importamos el dataframe.
+```{r}
+library(readr)
+library(forecast)
+
+df_train <- read_csv("./data/stock_returns_train.csv")
+```
+Pasamos a formato serie temporal.
+```{r}
+df_ts <- ts(df_train, frequency=12)
+
+df_train <- ts(df_ts[1:(7*12),], frequency=12)
+df_test <- ts(df_ts[(7*12+1):length(df_ts[,1]),], frequency=12)
+```
+
+Ploteamos los resultados.
+```{r}
+plot(df_train)
+```
+Crear funcion OneStepAhead
+```{r}
+oneStepAhead <- function(X_history, models) {
+  # X_history: matriz o data.frame con 5 columnas (activos) y t filas (historial hasta t)
+  # models: lista de 5 modelos ARIMA ya entrenados
+  
+  n_assets <- 5
+  mu_t <- numeric(n_assets)
+  sigma2_t <- numeric(n_assets)
+  
+  for (i in 1:n_assets) {
+    # Extraer la serie histórica del activo i
+    history_i <- X_history[, i]
+    
+    # Reajustar el modelo con el historial actualizado (opcional, depende de implementación)
+    # O simplemente predecir con el modelo existente
+    pred <- forecast(models[[i]], h = 1, xreg = NULL)  # ajustar si hay regresores
+    
+    mu_t[i] <- pred$mean
+    sigma2_t[i] <- pred$model$sigma2  # varianza residual
+  }
+  
+  return(list(
+    mu = mu_t,        # E[X_t|X_{1:t-1}] para los 5 activos
+    sigma2 = sigma2_t # V[X_t|X_{1:t-1}] para los 5 activos
+  ))
+}
+```
+
+Entrenar modelos finales y guardarlos
+
+```{r}
+# Entrenar modelos ARIMA con TODOS los datos de entrenamiento (7 años)
+models <- list()
+
+for (serie in 1:5) {
+  # Usar auto.arima para selección automática
+  model <- auto.arima(df_train[, serie])
+  models[[serie]] <- model
+  
+  # Opcional: guardar también el orden (p,d,q) para referencia
+  cat(sprintf("Serie %d: ARIMA(%d,%d,%d)\n", 
+              serie, 
+              model$arma[1],  # p
+              model$arma[6],  # d  
+              model$arma[2])) # q
+}
+```
+
+Simular periodo test con oneStepAhead
+
+```{r}
+# Preparar estructuras para almacenar resultados
+n_test <- nrow(df_test)
+all_mu <- matrix(NA, nrow = n_test, ncol = 5)
+all_sigma2 <- matrix(NA, nrow = n_test, ncol = 5)
+actual_values <- matrix(NA, nrow = n_test, ncol = 5)
+
+# Historial inicial: todos los datos de entrenamiento
+current_history <- df_train
+
+for (t in 1:n_test) {
+  # 1. Predecir t+1 usando historial hasta t
+  pred <- oneStepAhead(current_history, models)
+  
+  # 2. Guardar predicciones
+  all_mu[t, ] <- pred$mu
+  all_sigma2[t, ] <- pred$sigma2
+  
+  # 3. Guardar valor real (para evaluación)
+  actual_values[t, ] <- df_test[t, ]
+  
+  # 4. Actualizar historial añadiendo el valor real
+  current_history <- rbind(current_history, df_test[t, ])
+}
+```
+
+Calcular métricas de evaluación (MAPE)
+```{r}
+# Calcular MAPE para cada activo
+mape_per_asset <- numeric(5)
+
+for (i in 1:5) {
+  errors <- abs((actual_values[, i] - all_mu[, i]) / actual_values[, i])
+  mape_per_asset[i] <- mean(errors[is.finite(errors)], na.rm = TRUE) * 100
+}
+
+# MAPE promedio (métrica 1 del proyecto)
+mape_promedio <- mean(mape_per_asset)
+cat(sprintf("MAPE promedio: %.2f%%\n", mape_promedio))
+
+# Mostrar MAPE por activo
+for (i in 1:5) {
+  cat(sprintf("Activo %d: MAPE = %.2f%%\n", i, mape_per_asset[i]))
+}
+```
+
+
