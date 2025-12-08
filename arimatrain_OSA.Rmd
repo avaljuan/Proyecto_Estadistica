@@ -1,0 +1,401 @@
+---
+title: "arimatrain_OSA"
+author: "Álvaro Nieva Valenzuela"
+date: "2025-12-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+---
+title: "arimatrainPol"
+output: html_document
+---
+
+
+
+Cargamos la función de evaluación.
+```{r}
+getPred_ts <- function(Xtrain, Xtest, models) {
+  # Xtrain: matriz (T x n_activos) con los datos de entrenamiento
+  # Xtest:  matriz (H x n_activos) con los datos de test
+  # models: lista de modelos ARIMA (uno por activo)
+  
+  H <- nrow(Xtest)
+  n_assets <- ncol(Xtrain)
+  
+  mu_hat <- matrix(NA_real_, nrow = H, ncol = n_assets)
+  sigma2_hat <- matrix(NA_real_, nrow = H, ncol = n_assets)
+  
+  # Al principio no hemos visto nada del test
+  # (pasado de test vacío)
+  for (h in seq_len(H)) {
+    # Construimos el historial hasta t = T + h - 1
+    # Es decir: todo el train + las primeras (h-1) filas de test
+    if (h == 1) {
+      X1t <- Xtrain
+    } else {
+      X1t <- rbind(Xtrain, Xtest[1:(h-1), , drop = FALSE])
+    }
+    
+    # Llamamos a oneStepAhead (que por dentro usa getPred)
+    pred_h <- oneStepAhead(X1t, models)
+    
+    # Guardamos las predicciones para el "día" h de test
+    mu_hat[h, ] <- pred_h$mu
+    sigma2_hat[h, ] <- pred_h$sigma2
+  }
+  
+  return(list(mu_hat = mu_hat, sigma2_hat = sigma2_hat))
+}
+
+getPred <- function(x_past, mod) {
+
+  # Actualizamos el estado del modelo con todo el pasado
+  fit_upd <- Arima(x_past, model = mod)
+  
+  # Pronóstico a un paso
+  fc <- forecast::forecast(fit_upd, h = 1)
+  
+  # Valor esperado (media) del pronóstico
+  mu_hat <- as.numeric(fc$mean[1])
+  
+  # Estimamos la desviación estándar a partir del intervalo del 80%
+  z80 <- qnorm(0.8)
+  se_from_up <- (fc$upper[,"80%"][1] - fc$mean[1]) / z80
+  se_from_lo <- (fc$mean[1] - fc$lower[,"80%"][1]) / z80
+  se_hat_aux <- pmax(se_from_up, se_from_lo)
+  se_hat <- as.numeric(se_hat_aux)
+  
+  return(list(mu_hat = mu_hat, se_hat = se_hat))
+}
+
+oneStepAhead <- function(X1t, models) {
+  # X1t: matriz (t x n_activos) con TODO el pasado hasta el tiempo t
+  # models: lista de modelos ARIMA, uno por columna de X1t
+  
+  n_assets <- ncol(X1t)
+  mu <- numeric(n_assets)
+  sigma2 <- numeric(n_assets)
+  
+  for (i in seq_len(n_assets)) {
+    # Extraemos el pasado de la serie i (columna i)
+    x_past <- X1t[, i]
+    
+    # Usamos getPred para esa serie
+    pred_i <- getPred(x_past, models[[i]])
+    
+    # Media del pronóstico
+    mu[i] <- pred_i$mu_hat
+    
+    # Varianza = (desviación típica)^2
+    sigma2[i] <- pred_i$se_hat^2
+  }
+  
+  return(list(mu = mu, sigma2 = sigma2))
+}
+```
+
+
+
+Importamos el dataframe.
+```{r}
+library(readr)
+library(forecast)
+library(quadprog)
+
+df_train <- read_csv("./data/stock_returns_train.csv")
+```
+Pasamos a formato serie temporal.
+```{r}
+df_ts <- ts(df_train, frequency=12)
+
+df_train <- ts(df_ts[1:(7*12),], frequency=12)
+df_test <- ts(df_ts[(7*12+1):length(df_ts[,1]),], frequency=12)
+```
+
+Ploteamos los resultados.
+```{r}
+plot(df_train)
+```
+
+Entrenar modelos finales y guardarlos
+
+```{r}
+# Entrenar modelos ARIMA con TODOS los datos de entrenamiento (7 años)
+models <- list()
+
+for (serie in 1:5) {
+  # Usar auto.arima para selección automática
+  model <- auto.arima(df_train[, serie])
+  models[[serie]] <- model
+  
+  # Opcional: guardar también el orden (p,d,q) para referencia
+  cat(sprintf("Serie %d: ARIMA(%d,%d,%d)\n", 
+              serie, 
+              model$arma[1],  # p
+              model$arma[6],  # d  
+              model$arma[2])) # q
+}
+```
+Simular periodo test con oneStepAhead
+
+```{r}
+res <- getPred_ts(df_train, df_test, models)
+
+mu_hat     <- res$mu_hat      # H x 5, medias predichas
+sigma2_hat <- res$sigma2_hat  # H x 5, varianzas predichas
+
+# Si quieres, montar un data.frame para mirarlo bonito:
+df_pred <- data.frame(mu_hat)
+df_var <- as.data.frame(sigma2_hat)
+
+colnames(df_pred) <- c("E1", "E2", "E3", "E4", "E5")
+colnames(df_var) <- c("Var1", "Var2", "Var3", "Var4", "Var5")
+
+head(df_pred)
+head(df_var)
+```
+
+#APARTADO 3
+
+```{r}
+
+# estimar Sigma como la diagonal que tiene la varianza de cada activo
+getSigmaDiag <- function(sig, Xpast){
+  return(diag(sig))
+}
+
+# obtener alpha_t en funcion de mu_t, sig_t, gamma y la funcion Sigma(sig_t, Xpast) elegida
+getAlpha <- function(mu, sig, gamma, getSigmaFunc, getAlphaFunc, Xpast){
+  Sigma <- do.call(getSigmaFunc, list(sig, Xpast))
+  alpha <- do.call(getAlphaFunc, list(mu, Sigma, gamma))
+  return(alpha)  
+}
+
+# función de utilidad mean-variance
+Umv <- function(alpha, gamma, mu_hat, Sigma_hat){
+  return(sum(alpha*mu_hat)- (gamma/2)*(t(alpha)%*%Sigma_hat%*%alpha)[1,1])
+}
+
+# obtener alpha para todo periodo de test
+getAlpha_ts <- function(mus, sigs, gamma, getSigmaFunc, getAlphaFunc, Xtrain, Xtest){
+  H <- nrow(Xtest)
+  alpha_hat <- matrix(NA, H, 5)
+  Xpast <- Xtrain
+  for (h in seq_len(H)) {
+    alpha_hat[h,] <- getAlpha(mus[h,], sigs[h,], gamma, getSigmaFunc, getAlphaFunc, Xpast)
+    Xpast <- rbind(Xpast, Xtest[h,])
+  }  
+  return(alpha_hat)
+}
+
+# funcion para checar si las alfas cumplen los requisitos segun el inciso
+getChecks <- function(alpha_hat, mode=c("sum1","pos","int")){
+  passChecks <- TRUE
+  if(("sum1" %in% mode) & passChecks){
+    print("sum1 check")
+    passChecks <- all( (apply(alpha_hat, 1, sum)-1) <1e-6)
+  }
+  if(("pos" %in% mode) & passChecks){
+    print("pos check")
+    passChecks <- all(alpha_hat>=0)
+  }
+  if( ("int" %in% mode) & passChecks){
+    passChecks <- sapply(seq(0,5)/5, function(i) abs(alpha_hat-i) < 1e-6, simplify="array")
+    passChecks <- apply(passChecks, c(1,2), any)
+    passChecks <- all(passChecks)
+  }
+  return(passChecks)
+}
+
+# obtener el rendimeinto del portafolio
+getRet <- function(alpha_hat, Xtest, passChecks){
+  if(!passChecks) return(NA)
+  ret <-prod(1+apply(alpha_hat*Xtest, 1, sum))-1
+  return(ret)
+  
+}
+
+# funcion para evaluar la calidad de las utilidades obtenidas segun la funcion de utilidad y en comparacion
+# a ls solucion "getAlphaEqual"
+getUEval <- function(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gamma, passChecks, Ufunc){
+  if(!passChecks) return(NA)
+  U_val <- mean(sapply(1:nrow(alpha_hat), function(i) do.call(Ufunc, list(alpha_hat[i,],gamma, mu_hat[i,], getSigmaDiag(se_hat[i,], Xtrain)))))
+  alpha_hat_ref <- getAlpha_ts(mu_hat, se_hat, gamma, getSigmaDiag, getAlphaEqual, Xtrain, Xtest)
+  U_ref <- mean(sapply(1:nrow(alpha_hat), function(i) do.call(Ufunc, list(alpha_hat_ref[i,], gamma, mu_hat[i,], getSigmaDiag(se_hat[i,], Xtrain)))))
+  U_rel <-  (U_val-U_ref)/abs(U_ref)
+  return(U_rel)
+}
+
+# solución en la que alpha es igual para todos activos. Usaremos esta
+# como referencia para evaluar la calidad de nuestra solucion dado que cada
+# quien puede elegir distinta gamma, Sigma, mu.
+getAlphaEqual <- function(mu,Sigma, gamma){
+  alpha <- rep(1,length(mu))
+  alpha <- alpha/sum(alpha)
+  return(alpha)
+}
+
+```
+
+
+# 3.1 Con cortos permitidos
+```{r}
+#mu → vector con los rendimientos esperados de los activos (µₜ).
+#Sigma → matriz de covarianzas de esos activos (Σₜ).
+#gamma → parámetro de aversión al riesgo.
+#Encuentra los pesos óptimos α que maximizan la utilidad media–varianza:
+getAlphaMV_short <- function(mu, Sigma, gamma){
+
+  Dmat <- gamma * Sigma
+  dvec <- mu
+
+  # Restricción sum(alpha) = 1  (igualdad)
+  Amat <- matrix(1, nrow = length(mu), ncol = 1)
+  bvec <- 1
+  meq  <- 1
+
+  sol <- solve.QP(Dmat, dvec, Amat, bvec, meq = meq)
+  return(sol$solution)
+}
+```
+
+
+```{r}
+mus  <- mu_hat                  # H x 5
+sigs <- sqrt(sigma2_hat)        # H x 5  (si quieres seguir el esquema del profe)
+gamma <- 5                      # por ejemplo; elige un valor y luego puedes probar varios
+
+alpha_hat_mv_short <- getAlpha_ts(
+  mus   = mus,
+  sigs  = sigs,
+  gamma = gamma,
+  getSigmaFunc = getSigmaDiag, # función que construye Σ_t a partir de 'sig' y Xpast, aquí es simplemente Σ_t = diag(sig), sin correlaciones
+  getAlphaFunc = getAlphaMV_short, # función que, dado (mu_t, Σ_t, gamma), resuelve el problema de optimización media-varianza, con cortos permitidos
+  Xtrain = df_train,
+  Xtest  = df_test
+)
+
+checks_short <- getChecks(alpha_hat_mv_short, mode = c("sum1")) #Comprobar que las alfas cumplen la restricción sum(alpha_t) = 1
+
+ret_short <- getRet(alpha_hat_mv_short, df_test, checks_short) #Calcular el rendimiento total del portafolio en el periodo de test
+
+Urel_short <- getUEval(alpha_hat_mv_short, mus, sigs, df_train, df_test, gamma, checks_short, Umv)#Evaluar la calidad de la solución en términos de UTILIDAD                                                                                                       #comparada con la cartera de referencia (pesos iguales)
+paste0("check_short:", checks_short) # debería ser TRUE
+paste0("ret_short:", ret_short) # rendimiento total del periodo test
+paste0("Urel_short:", Urel_short) # utilidad relativa vs. "todos iguales"
+
+```
+# 3.2 Sin cortos (α ≥ 0)
+
+```{r}
+getAlphaMV_pos <- function(mu, Sigma, gamma){
+  
+  Dmat <- gamma * Sigma # Matriz asociada al término cuadrático (riesgo)
+  dvec <- mu # Vector asociado al término lineal (rendimiento esperado)
+  
+  n <- length(mu) # Número de activos
+  
+  # Primera columna: sum(alpha) = 1 (igualdad)
+  # Resto: alpha_i >= 0
+  Amat <- cbind(
+    rep(1, n),   # para sum(alpha) = 1
+    diag(n)      # para alpha_i >= 0
+  )
+  
+  # bvec tiene una entrada por COLUMNA de Amat:
+  #   - Para la 1ª restricción: sum(alpha_i) >= 1
+  #     (y como la marcamos como igualdad con meq=1, será sum(alpha_i) = 1)
+  #   - Para las siguientes: alpha_i >= 0
+  bvec <- c(1, rep(0, n))
+  
+  # meq indica cuántas de las restricciones (empezando por la primera)
+  # se tratan como IGUALDADES. Aquí solo la primera (sum(alpha) = 1).
+  meq  <- 1
+  
+  # 3. Resolver el problema cuadrático
+  sol <- solve.QP(Dmat, dvec, Amat, bvec, meq = meq)
+  
+  # 'sol$solution' es el vector alpha* (óptimo) que:
+  #   - maximiza UMV(alpha)
+  #   - cumple sum(alpha_i) = 1
+  #   - y alpha_i >= 0  (sin posiciones cortas)
+  return(sol$solution)
+}
+
+```
+
+```{r}
+alpha_hat_mv_pos <- getAlpha_ts(
+  mus   = mus,
+  sigs  = sigs,
+  gamma = gamma,
+  getSigmaFunc = getSigmaDiag,
+  getAlphaFunc = getAlphaMV_pos,
+  Xtrain = df_train,
+  Xtest  = df_test
+)
+
+checks_pos <- getChecks(alpha_hat_mv_pos, mode = c("sum1", "pos"))
+
+ret_pos <- getRet(alpha_hat_mv_pos, df_test, checks_pos)
+Urel_pos <- getUEval(alpha_hat_mv_pos, mus, sigs, df_train, df_test,
+                     gamma, checks_pos, Umv)
+
+paste0("ret_pos:", ret_pos)
+paste0("Urel_pos:", Urel_pos)
+```
+# Apartado 3.3 – Sin cortos y α en {0, 1/5, …, 1}
+
+```{r}
+getAlphaMV_pos_int <- function(mu, Sigma, gamma){
+  # Todas las combinaciones de k1,...,k5 con ki ∈ {0,...,5} y sum(ki)=5
+  ks <- expand.grid(0:5, 0:5, 0:5, 0:5, 0:5)
+  ks <- as.matrix(ks)
+  ks <- ks[rowSums(ks) == 5, , drop = FALSE]
+  
+  best_U <- -Inf
+  best_alpha <- rep(NA, 5)
+  
+  for (r in seq_len(nrow(ks))) {
+    alpha <- ks[r, ] / 5
+    U <- Umv(alpha, gamma, mu, Sigma)
+    if (U > best_U) {
+      best_U <- U
+      best_alpha <- alpha
+    }
+  }
+  
+  return(best_alpha)
+}
+```
+
+```{r}
+alpha_hat_mv_pos_int <- getAlpha_ts(
+  mus   = mus,
+  sigs  = sigs,
+  gamma = gamma,
+  getSigmaFunc = getSigmaDiag,
+  getAlphaFunc = getAlphaMV_pos_int,
+  Xtrain = df_train,
+  Xtest  = df_test
+)
+
+checks_int <- getChecks(alpha_hat_mv_pos_int, mode = c("sum1", "pos", "int"))
+
+ret_int <- getRet(alpha_hat_mv_pos_int, df_test, checks_int)
+Urel_int <- getUEval(alpha_hat_mv_pos_int, mus, sigs, df_train, df_test,
+                     gamma, checks_int, Umv)
+
+paste0("ret_int:", ret_int)
+paste0("Urel_int:", Urel_int)
+```
+```{r}
+save(alpha_hat_mv_pos,file = "alpha_hat_mv_pos.RData")
+save(alpha_hat_mv_pos_int,file = "alpha_hat_mv_pos_int.RData")
+save(alpha_hat_mv_short,file = "alpha_hat_mv_short.RData")
+
+```
+
