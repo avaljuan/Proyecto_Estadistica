@@ -53,6 +53,39 @@ getPred <- function(x_train, x_test_past){
   return(list(mu_hat=mu_hat, se_hat=se_hat))
 }
 
+getPred_ts <- function(Xtrain, Xtest, getPred) {
+  # Xtrain: matriz (T x n_activos) con periodo de entrenamiento
+  # Xtest : matriz (H x n_activos) con periodo de test
+  # getPred: función (x_train, x_test_past) -> list(mu_hat, se_hat)
+  
+  H        <- nrow(Xtest)
+  n_assets <- ncol(Xtrain)
+  
+  mu_hat     <- matrix(NA_real_, nrow = H, ncol = n_assets)
+  sigma2_hat <- matrix(NA_real_, nrow = H, ncol = n_assets)
+  
+  for (h in seq_len(H)) {
+    for (i in seq_len(n_assets)) {
+      x_train_i <- Xtrain[, i]
+      
+      if (h == 1) {
+        # al inicio del test no hay pasado de test
+        x_test_past_i <- numeric(0)
+      } else {
+        # pasado de test del activo i: filas 1..(h-1) de Xtest[, i]
+        x_test_past_i <- Xtest[1:(h - 1), i]
+      }
+      
+      # Llamada a getPred usando do.call
+      pred_i <- do.call(getPred, list(x_train_i, x_test_past_i))
+      
+      mu_hat[h, i]     <- pred_i$mu_hat
+      sigma2_hat[h, i] <- pred_i$se_hat^2
+    }
+  }
+  
+  return(list(mu_hat = mu_hat, sigma2_hat = sigma2_hat))
+}
 #####################################
 # seccion 3 - utilidad media-varianza
 ###########################################################
@@ -67,14 +100,24 @@ getSigmaMV <- function(sig, Xpast){
   # INPUT: sig, vector en R^5 con desviaciones estandar de 5 activos al momento t
   #        Xpast, matriz en R^(T x 5) con rendimientos de 5 activos desde t=0 hasta t-1
   # OUTPUT: Sigma: matriz en 5 x 5 con covarianzas entre activos
-  
+    
+  # Creamos la matriz de correlación R
+    
+  R <- cor(Xpast)
+    
+  # Creamos la matriz diagonal D
+    
+  D <- diag(sig)
+    
   #INSERTAR CONSTRUCCION DE MATRIZ DE COVARIANZAS 
-  Sigma <- # INSERTAR CALCULO FINAL DE SIGMA (MATRIZ DE 5 X 5)
+  Sigma <- D %*% R %*% D
+    
   return(Sigma)
 }
 
 # Funcion para optimizar la asignacion de cada activo dentro del portafolio
 # tomando en cuenta la utilidad Media-Varianza CON posiciones cortas
+
 getAlphaMV <- function(mu,Sigma, gamma){
   # INPUT: mu: vector en R^5 con los rendimientos esperados de los 5 activos para el periodo t
   #        Sigma: matriz en R^{5 x 5} con las covarianzas de los 5 activos
@@ -82,8 +125,30 @@ getAlphaMV <- function(mu,Sigma, gamma){
   # OUTPUT: alpha: vector en R^5 con la asignación elegida para los 5 activos resultante de optimizar
   # U-MV sujeto a que alpha sume a 1.
   
-  #INSERTAR PASOS DE OPTIMIZACION
-  alpha <- # INSERTAR CALCULO FINAL DE ALPHA
+  # INSERTAR PASOS DE OPTIMIZACION
+  # Problema: Max (alpha^T * mu - (gamma/2) * alpha^T * Sigma * alpha)
+  # Equivalente a QP: Min ((gamma/2) * alpha^T * Sigma * alpha - mu^T * alpha)
+  # Sujeto a: sum(alpha) = 1
+  
+  n_assets <- length(mu)
+  
+  # Matriz cuadrática (D en quadprog es 2 * término cuadrático si no hay factor 1/2, 
+  # pero solve.QP minimiza 1/2 x^T D x. Nuestra función tiene gamma/2.
+  # Por lo tanto, pasamos gamma * Sigma como Dmat).
+  Dmat <- gamma * Sigma
+  
+  # Vector lineal (-d^T b en solve.QP). Nosotros tenemos -mu^T alpha.
+  dvec <- mu
+  
+  # Restricciones: Sum(alpha) = 1
+  # Amat^T * alpha >= bvec (o = bvec si meq > 0)
+  Amat <- matrix(1, nrow=n_assets, ncol=1) # Columna de 1s
+  bvec <- 1
+  
+  # Resolvemos QP (meq=1 indica que la primera restricción es de igualdad)
+  sol <- solve.QP(Dmat, dvec, Amat, bvec, meq=1)
+  
+  alpha <- sol$solution
   return(alpha)
 } 
 
@@ -162,11 +227,14 @@ getAlphaLog <- function(mu,Sigma, gamma){
 ###############################################################
 # Evaluación de soluciones
 ###############################################################
+library(rstudioapi)
+
+setwd(dirname(getActiveDocumentContext()$path))
+
 source("funciones/eval_funcs.R")
 
-setwd("/.")
-X <- read.csv("stock_returns_train_2.csv")
-X <- ts(X/100)
+X <- read.csv("data/stock_returns_train_2.csv")
+X <- ts(X)
 
 # Validation mode - para que se evaluen asi mismos con el 
 Xtrain <- window(X, start=1,end=8*12) # el start-end es un ejemplo, pueden cambiarlo
@@ -185,10 +253,11 @@ mu_hat = res$mu_hat
 se_hat = res$se_hat
 
 # MAPE
-i <- 2
+
+for (i in 1:5) {
 plot(as.data.frame(Xtest)[,i], ty="l")
 lines(mu_hat[,i], col="blue", ty="l")
-
+}
 
 
 
@@ -206,26 +275,27 @@ ret <- getRet(alpha_hat, Xtest, passChecks)
 evals <- c(evals, retMV=ret)
 Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaMV, getSigmaMV, passChecks, Umv)
 evals <- c(evals,  Umv=Umv_rel)
-
-# utilidad media-varianza, alfa_i positiva 
-
-alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaMVPos, getSigmaMVPos, getAlphaMVPos, Xtrain, Xtest)
-passChecks <- getChecks(alpha_hat, mode=c("sum1","pos"))
-ret <- getRet(alpha_hat, Xtest, passChecks)
-evals <- c(evals, retMVPos=ret)
-Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaMVPos, getSigmaMVPos, passChecks, Umv)
-evals <- c(evals,  UmvPos=Umv_rel)
-
-
-# seccion 4 - 
-# utilidad log, alfa_i positiva o negativa
-
-alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaLog, getSigmaLog, getAlphaLog, Xtrain, Xtest)
-passChecks <- getChecks(alpha_hat, mode=c("sum1"))
-ret <- getRet(alpha_hat, Xtest, passChecks)
-evals <- c(evals, retLog=ret)
-Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaLog, getSigmaLog, passChecks, Umv)
-evals <- c(evals,  UmvPosInt=Umv_rel)
-
 evals
+# 
+# # utilidad media-varianza, alfa_i positiva
+# 
+# alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaMVPos, getSigmaMVPos, getAlphaMVPos, Xtrain, Xtest)
+# passChecks <- getChecks(alpha_hat, mode=c("sum1","pos"))
+# ret <- getRet(alpha_hat, Xtest, passChecks)
+# evals <- c(evals, retMVPos=ret)
+# Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaMVPos, getSigmaMVPos, passChecks, Umv)
+# evals <- c(evals,  UmvPos=Umv_rel)
+# 
+# 
+# # seccion 4 -
+# # utilidad log, alfa_i positiva o negativa
+# 
+# alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaLog, getSigmaLog, getAlphaLog, Xtrain, Xtest)
+# passChecks <- getChecks(alpha_hat, mode=c("sum1"))
+# ret <- getRet(alpha_hat, Xtest, passChecks)
+# evals <- c(evals, retLog=ret)
+# Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaLog, getSigmaLog, passChecks, Umv)
+# evals <- c(evals,  UmvPosInt=Umv_rel)
+# 
+# evals
 
