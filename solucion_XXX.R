@@ -30,7 +30,7 @@ getPred <- function(x_train, x_test_past){
   
   # INSERTAR ESTIMACION DE MODELO DE SERIES DE TIEMPO PARA MOMENTO T PARA UN ACTIVO
   
-  # Actualizamos el estado del modelo con todo el pasado
+  # Entrenamos el modelo con todo el pasado
   modelo <- auto.arima(x_train)
   
   datos_actuales <- c(x_train,x_test_past)
@@ -133,8 +133,17 @@ getSigmaMVPos <- function(sig, Xpast){
   #        Xpast, matriz en R^(T x 5) con rendimientos de 5 activos desde t=0 hasta t-1
   # OUTPUT: Sigma: matriz en 5 x 5 con covarianzas entre activos
   
+  # Creamos la matriz de correlación R
+  
+  R <- cor(Xpast)
+  
+  # Creamos la matriz diagonal D
+  
+  D <- diag(sig)
+  
   #INSERTAR CONSTRUCCION DE MATRIZ DE COVARIANZAS 
-  Sigma <- # INSERTAR CALCULO FINAL DE SIGMA (MATRIZ DE 5 X 5)
+  Sigma <- D %*% R %*% D
+  
   return(Sigma)
 }
 
@@ -147,8 +156,27 @@ getAlphaMVPos <- function(mu,Sigma, gamma){
   # OUTPUT: alpha: vector en R^5 con la asignación elegida para los 5 activos resultante de optimizar
   # U-MV sujeto a que alpha sume a 1 y alpha_i>0.
   
-  #INSERTAR PASOS DE OPTIMIZACION
-  alpha <- # INSERTAR CALCULO FINAL DE ALPHA
+  # INSERTAR PASOS DE OPTIMIZACION
+  n_assets <- length(mu)
+  
+  # Matriz y vector objetivo iguales al caso anterior
+  Dmat <- gamma * Sigma
+  dvec <- mu
+  
+  # Restricciones:
+  # 1. Sum(alpha) = 1 (Igualdad)
+  # 2. alpha_i >= 0   (Desigualdad, matriz identidad)
+  
+  A_sum <- matrix(1, nrow=n_assets, ncol=1)
+  A_pos <- diag(n_assets)
+  Amat <- cbind(A_sum, A_pos) # Combinamos restricciones
+  
+  bvec <- c(1, rep(0, n_assets)) # 1 para la suma, 0s para la positividad
+  
+  # meq=1: la primera restricción (suma) es igualdad, el resto desigualdad
+  sol <- solve.QP(Dmat, dvec, Amat, bvec, meq=1)
+  
+  alpha <- sol$solution
   return(alpha)
 }
 
@@ -167,8 +195,17 @@ getSigmaLog <- function(sig, Xpast){
   #        Xpast, matriz en R^(T x 5) con rendimientos de 5 activos desde t=0 hasta t-1
   # OUTPUT: Sigma: matriz en 5 x 5 con covarianzas entre activos
   
+  # Creamos la matriz de correlación R
+  
+  R <- cor(Xpast)
+  
+  # Creamos la matriz diagonal D
+  
+  D <- diag(sig)
+  
   #INSERTAR CONSTRUCCION DE MATRIZ DE COVARIANZAS 
-  Sigma <- # INSERTAR CALCULO FINAL DE SIGMA (MATRIZ DE 5 X 5)
+  Sigma <- D %*% R %*% D
+  
   return(Sigma)
 }
 
@@ -181,9 +218,34 @@ getAlphaLog <- function(mu,Sigma, gamma){
   # OUTPUT: alpha: vector en R^5 con la asignación elegida para los 5 activos resultante de optimizar
   # U-log sujeto a que alpha sume a 1.
   
-  #INSERTAR PASOS DE OPTIMIZACION
-  alpha <- # INSERTAR CALCULO FINAL DE ALPHA
-  return(alpha)
+  fn_obj <- function(alpha_reduced) {
+    # Reconstruimos el vector completo alpha (dimensión 5) a partir de 4 variables
+    # alpha_5 = 1 - sum(alpha_1...4)
+    alpha_full <- c(alpha_reduced, 1 - sum(alpha_reduced))
+    
+    term1 <- log(1 + sum(alpha_full * mu))
+    
+    # Riesgo: alpha^T * Sigma * alpha
+    risk_num <- t(alpha_full) %*% Sigma %*% alpha_full
+    risk_den <- (1 + sum(alpha_full * mu))^2
+    term2 <- (gamma / 2) * (risk_num / risk_den)
+    
+    util <- term1 - term2
+    
+    # Retornamos negativo para minimizar
+    return(-util) 
+  }
+  
+  # Punto inicial: Portafolio equiponderado (1/5)
+  init_params <- rep(0.2, 4) 
+  
+  # Optimizamos usando Nelder-Mead (robusto para no lineales sin gradiente)
+  opt <- optim(par = init_params, fn = fn_obj, method = "Nelder-Mead")
+  
+  # Recuperamos el alpha completo
+  alpha_opt <- c(opt$par, 1 - sum(opt$par))
+  
+  return(alpha_opt)
 }
 
 
@@ -243,26 +305,26 @@ Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaMV, getSigmaM
 evals <- c(evals,  Umv=Umv_rel)
 evals
 
-# 
-# # utilidad media-varianza, alfa_i positiva
-# 
-# alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaMVPos, getSigmaMVPos, getAlphaMVPos, Xtrain, Xtest)
-# passChecks <- getChecks(alpha_hat, mode=c("sum1","pos"))
-# ret <- getRet(alpha_hat, Xtest, passChecks)
-# evals <- c(evals, retMVPos=ret)
-# Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaMVPos, getSigmaMVPos, passChecks, Umv)
-# evals <- c(evals,  UmvPos=Umv_rel)
-# 
-# 
-# # seccion 4 -
-# # utilidad log, alfa_i positiva o negativa
-# 
-# alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaLog, getSigmaLog, getAlphaLog, Xtrain, Xtest)
-# passChecks <- getChecks(alpha_hat, mode=c("sum1"))
-# ret <- getRet(alpha_hat, Xtest, passChecks)
-# evals <- c(evals, retLog=ret)
-# Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaLog, getSigmaLog, passChecks, Umv)
-# evals <- c(evals,  UmvPosInt=Umv_rel)
-# 
-# evals
+
+# utilidad media-varianza, alfa_i positiva
+
+alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaMVPos, getSigmaMVPos, getAlphaMVPos, Xtrain, Xtest)
+passChecks <- getChecks(alpha_hat, mode=c("sum1","pos"))
+ret <- getRet(alpha_hat, Xtest, passChecks)
+evals <- c(evals, retMVPos=ret)
+Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaMVPos, getSigmaMVPos, passChecks, Umv)
+evals <- c(evals,  UmvPos=Umv_rel)
+
+
+# seccion 4 -
+# utilidad log, alfa_i positiva o negativa
+
+alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaLog, getSigmaLog, getAlphaLog, Xtrain, Xtest)
+passChecks <- getChecks(alpha_hat, mode=c("sum1"))
+ret <- getRet(alpha_hat, Xtest, passChecks)
+evals <- c(evals, retLog=ret)
+Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaLog, getSigmaLog, passChecks, Umv)
+evals <- c(evals,  UmvPosInt=Umv_rel)
+
+evals
 
