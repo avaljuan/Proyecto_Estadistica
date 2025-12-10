@@ -173,9 +173,12 @@ lines(mu_hat[,i], col="blue", ty="l")
 
 
 
+
 rmse <- sqrt(mean((Xtest-mu_hat)^2))
 evals <- c(rmse=rmse)
 evals
+
+'''
 
 # seccion 3 - utilidad media varianza
 # utilidad media-varianza, alfa_i positiva o negativa
@@ -209,4 +212,4 @@ evals <- c(evals,  UmvPosInt=Umv_rel)
 
 evals
 
-
+'''
