@@ -60,10 +60,22 @@ getPred <- function(x_train, x_test_past){
 ###########################################################
 gammaMV <- 5 #INSERTAR VALOR EN REALES
 
-getGamma <- function(X_train, X_test){
+getGamma <- function(mu_hat, se_hat, Xtrain, Xtest, getSigma, getAlpha, Ufunc, crit){
   
+  gamma_list <- seq(0.1,10,length.out=100)
+  U_list <- c()
   
+  for (i in 1:length(gamma_list)) {
+    
+    alpha_hat <- getAlpha_ts(mu_hat, se_hat, gamma_list[i], getSigma, getAlpha, Xtrain, Xtest)
+    passChecks <- getChecks(alpha_hat, mode=c(crit))
+    
+    print(sum(alpha_hat))
+    
+    U_list[i] <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gamma_list[i], getSigma, passChecks, Ufunc)
+  }
   
+  return(gamma_list[which.min(U_list)])
 }
 
 # Funcion para estimar la matriz de covarianzas entre los rendimientos de los 5
@@ -270,7 +282,7 @@ setwd(dirname(getActiveDocumentContext()$path))
 source("funciones/eval_funcs.R")
 
 X <- read.csv("data/stock_returns_train_2.csv")
-X <- ts(X)
+X <- ts(X/100)
 
 # Validation mode - para que se evaluen asi mismos con el 
 Xtrain <- window(X, start=1,end=8*12) # el start-end es un ejemplo, pueden cambiarlo
@@ -306,8 +318,11 @@ print('')
 # seccion 3 - utilidad media varianza
 # utilidad media-varianza, alfa_i positiva o negativa
 
+crit <- "sum1"
+gammaMV <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaMV, getAlphaMV, Umv, crit)
+
 alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaMV, getSigmaMV, getAlphaMV, Xtrain, Xtest)
-passChecks <- getChecks(alpha_hat, mode="sum1")
+passChecks <- getChecks(alpha_hat, mode=crit)
 ret <- getRet(alpha_hat, Xtest, passChecks)
 evals <- c(evals, retMV=ret)
 Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaMV, getSigmaMV, passChecks, Umv)
@@ -317,8 +332,11 @@ cat('R = ',evals[2], '; Uv = ', evals[3], '\n')
 
 # utilidad media-varianza, alfa_i positiva
 
+crit <- c("sum1","pos")
+gammaMVPos <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaMVPos, getAlphaMVPos, Umv, crit)
+
 alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaMVPos, getSigmaMVPos, getAlphaMVPos, Xtrain, Xtest)
-passChecks <- getChecks(alpha_hat, mode=c("sum1","pos"))
+passChecks <- getChecks(alpha_hat, mode=crit)
 ret <- getRet(alpha_hat, Xtest, passChecks)
 evals <- c(evals, retMVPos=ret)
 Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaMVPos, getSigmaMVPos, passChecks, Umv)
@@ -330,11 +348,15 @@ print('')
 # seccion 4 -
 # utilidad log, alfa_i positiva o negativa
 
+crit <- "sum1"
+gammaLog <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaLog, getAlphaLog, Ulog, crit)
+
 alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaLog, getSigmaLog, getAlphaLog, Xtrain, Xtest)
-passChecks <- getChecks(alpha_hat, mode=c("sum1"))
+passChecks <- getChecks(alpha_hat, mode=crit)
 ret <- getRet(alpha_hat, Xtest, passChecks)
 evals <- c(evals, retLog=ret)
-Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaLog, getSigmaLog, passChecks, Umv)
+print(passChecks)
+Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaLog, getSigmaLog, passChecks, Ulog)
 evals <- c(evals,  UmvPosInt=Umv_rel)
 
 print('Seccion 4')
