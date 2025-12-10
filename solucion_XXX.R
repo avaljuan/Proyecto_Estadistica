@@ -53,45 +53,12 @@ getPred <- function(x_train, x_test_past){
   return(list(mu_hat=mu_hat, se_hat=se_hat))
 }
 
-getPred_ts <- function(Xtrain, Xtest, getPred) {
-  # Xtrain: matriz (T x n_activos) con periodo de entrenamiento
-  # Xtest : matriz (H x n_activos) con periodo de test
-  # getPred: función (x_train, x_test_past) -> list(mu_hat, se_hat)
-  
-  H        <- nrow(Xtest)
-  n_assets <- ncol(Xtrain)
-  
-  mu_hat     <- matrix(NA_real_, nrow = H, ncol = n_assets)
-  sigma2_hat <- matrix(NA_real_, nrow = H, ncol = n_assets)
-  
-  for (h in seq_len(H)) {
-    for (i in seq_len(n_assets)) {
-      x_train_i <- Xtrain[, i]
-      
-      if (h == 1) {
-        # al inicio del test no hay pasado de test
-        x_test_past_i <- numeric(0)
-      } else {
-        # pasado de test del activo i: filas 1..(h-1) de Xtest[, i]
-        x_test_past_i <- Xtest[1:(h - 1), i]
-      }
-      
-      # Llamada a getPred usando do.call
-      pred_i <- do.call(getPred, list(x_train_i, x_test_past_i))
-      
-      mu_hat[h, i]     <- pred_i$mu_hat
-      sigma2_hat[h, i] <- pred_i$se_hat^2
-    }
-  }
-  
-  return(list(mu_hat = mu_hat, sigma2_hat = sigma2_hat))
-}
 #####################################
 # seccion 3 - utilidad media-varianza
 ###########################################################
 # 3.1 utilidad media-varianza, alfa_i positiva o negativa
 ###########################################################
-gammaMV <- #INSERTAR VALOR EN REALES 
+gammaMV <- 5 #INSERTAR VALOR EN REALES 
 
 # Funcion para estimar la matriz de covarianzas entre los rendimientos de los 5
 # activos a partir de las desviaciones estándares (que vendran de su modelo Arima)
@@ -156,7 +123,7 @@ getAlphaMV <- function(mu,Sigma, gamma){
 # 3.2 utilidad media-varianza, alfa_i positiva 
 ############################################
 
-gammaMVPos <- #INSERTAR VALOR EN REALES
+gammaMVPos <- 5 #INSERTAR VALOR EN REALES
 
 # Funcion para estimar la matriz de covarianzas entre los rendimientos de los 5
 # activos a partir de las desviaciones estándares (que vendran de su modelo Arima)
@@ -190,7 +157,7 @@ getAlphaMVPos <- function(mu,Sigma, gamma){
 # seccion 4 - 
 # utilidad log, alfa_i positiva o negativa
 ################################################
-gammaLog = # INSERTAR VALOR EN REALES
+gammaLog = 5 # INSERTAR VALOR EN REALES
 
 # Funcion para estimar la matriz de covarianzas entre los rendimientos de los 5
 # activos a partir de las desviaciones estándares (que vendran de su modelo Arima)
@@ -265,7 +232,6 @@ rmse <- sqrt(mean((Xtest-mu_hat)^2))
 evals <- c(rmse=rmse)
 evals
 
-
 # seccion 3 - utilidad media varianza
 # utilidad media-varianza, alfa_i positiva o negativa
 
@@ -276,6 +242,7 @@ evals <- c(evals, retMV=ret)
 Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaMV, getSigmaMV, passChecks, Umv)
 evals <- c(evals,  Umv=Umv_rel)
 evals
+
 # 
 # # utilidad media-varianza, alfa_i positiva
 # 
