@@ -1,6 +1,6 @@
 # solucion trivial ejemplo
 remove(list=ls())
-setwd("/home/emiliano/Documents/estadistica/estadistica_y_optimizacion_master/proyecto/")
+setwd("/.")
 dir()
 # cargamos funciones con soluciones triviales. 
 # Cada equipo debera definir en su archivo de solucion_teamName.R todas las
@@ -10,7 +10,7 @@ dir()
 # MODIFICAR DESDE AQUI...
 
 
-teamName <- "????"
+teamName <- "Taiwan"
 # integrante 1: 
 # integrante 2:
 # integrante 3:
@@ -146,7 +146,7 @@ getAlphaLog <- function(mu,Sigma, gamma){
 ###############################################################
 source("funciones/eval_funcs.R")
 
-setwd("/home/emiliano/Documents/estadistica/estadistica_y_optimizacion_master/proyecto/")
+setwd("/.")
 X <- read.csv("stock_returns_train_2.csv")
 X <- ts(X)
 
