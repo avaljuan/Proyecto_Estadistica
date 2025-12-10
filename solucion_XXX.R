@@ -148,7 +148,7 @@ source("funciones/eval_funcs.R")
 
 setwd("/.")
 X <- read.csv("stock_returns_train_2.csv")
-X <- ts(X)
+X <- ts(X/100)
 
 # Validation mode - para que se evaluen asi mismos con el 
 Xtrain <- window(X, start=1,end=8*12) # el start-end es un ejemplo, pueden cambiarlo
@@ -178,7 +178,6 @@ rmse <- sqrt(mean((Xtest-mu_hat)^2))
 evals <- c(rmse=rmse)
 evals
 
-'''
 
 # seccion 3 - utilidad media varianza
 # utilidad media-varianza, alfa_i positiva o negativa
@@ -212,4 +211,3 @@ evals <- c(evals,  UmvPosInt=Umv_rel)
 
 evals
 
-'''
