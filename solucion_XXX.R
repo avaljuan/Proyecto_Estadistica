@@ -53,6 +53,39 @@ getPred <- function(x_train, x_test_past){
   return(list(mu_hat=mu_hat, se_hat=se_hat))
 }
 
+getPred_ts <- function(Xtrain, Xtest, getPred) {
+  # Xtrain: matriz (T x n_activos) con periodo de entrenamiento
+  # Xtest : matriz (H x n_activos) con periodo de test
+  # getPred: función (x_train, x_test_past) -> list(mu_hat, se_hat)
+  
+  H        <- nrow(Xtest)
+  n_assets <- ncol(Xtrain)
+  
+  mu_hat     <- matrix(NA_real_, nrow = H, ncol = n_assets)
+  sigma2_hat <- matrix(NA_real_, nrow = H, ncol = n_assets)
+  
+  for (h in seq_len(H)) {
+    for (i in seq_len(n_assets)) {
+      x_train_i <- Xtrain[, i]
+      
+      if (h == 1) {
+        # al inicio del test no hay pasado de test
+        x_test_past_i <- numeric(0)
+      } else {
+        # pasado de test del activo i: filas 1..(h-1) de Xtest[, i]
+        x_test_past_i <- Xtest[1:(h - 1), i]
+      }
+      
+      # Llamada a getPred usando do.call
+      pred_i <- do.call(getPred, list(x_train_i, x_test_past_i))
+      
+      mu_hat[h, i]     <- pred_i$mu_hat
+      sigma2_hat[h, i] <- pred_i$se_hat^2
+    }
+  }
+  
+  return(list(mu_hat = mu_hat, sigma2_hat = sigma2_hat))
+}
 #####################################
 # seccion 3 - utilidad media-varianza
 ###########################################################
@@ -162,10 +195,13 @@ getAlphaLog <- function(mu,Sigma, gamma){
 ###############################################################
 # Evaluación de soluciones
 ###############################################################
+library(rstudioapi)
+
+setwd(dirname(getActiveDocumentContext()$path))
+
 source("funciones/eval_funcs.R")
 
-setwd("/.")
-X <- read.csv("stock_returns_train_2.csv")
+X <- read.csv("data/stock_returns_train_2.csv")
 X <- ts(X)
 
 # Validation mode - para que se evaluen asi mismos con el 
