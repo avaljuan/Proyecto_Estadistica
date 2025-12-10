@@ -29,10 +29,28 @@ getPred <- function(x_train, x_test_past){
   
   
   # INSERTAR ESTIMACION DE MODELO DE SERIES DE TIEMPO PARA MOMENTO T PARA UN ACTIVO
-  mu_hat <- # INSERTAR CALCULO FINAL DE LA PREDICCION (UN SOLO NUMERO)
-  se_hat <- # INSERTAR CALCULO FINAL DE LA DESVIACIONE STANDAR (UN SOLO NUMERO)
   
-    return(list(mu_hat=mu_hat, se_hat=se_hat))
+  # Actualizamos el estado del modelo con todo el pasado
+  modelo <- auto.arima(x_train)
+  
+  datos_actuales <- c(x_train,x_test_past)
+  
+  nuevo_ajuste <- Arima(datos_actuales, model = modelo)
+  
+  # Pronóstico a un paso
+  fc <- forecast::forecast(nuevo_ajuste, h = 1)
+  
+  # Valor esperado (media) del pronóstico
+  mu_hat <- as.numeric(fc$mean[1])
+  
+  # Estimamos la desviación estándar a partir del intervalo del 80%
+  z80 <- qnorm(0.8)
+  se_from_up <- (fc$upper[,"80%"][1] - fc$mean[1]) / z80
+  se_from_lo <- (fc$mean[1] - fc$lower[,"80%"][1]) / z80
+  se_hat_aux <- pmax(se_from_up, se_from_lo)
+  se_hat <- as.numeric(se_hat_aux)
+  
+  return(list(mu_hat=mu_hat, se_hat=se_hat))
 }
 
 #####################################
