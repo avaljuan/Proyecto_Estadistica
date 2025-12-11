@@ -10,7 +10,7 @@ dir()
 # MODIFICAR DESDE AQUI...
 
 
-teamName <- "Taiwan"
+teamName <- "ChinaGrande"
 # integrante 1: 
 # integrante 2:
 # integrante 3:
@@ -62,7 +62,7 @@ gammaMV <- 5 #INSERTAR VALOR EN REALES
 
 getGamma <- function(mu_hat, se_hat, Xtrain, Xtest, getSigma, getAlpha, Ufunc, crit){
   
-  gamma_list <- seq(0.1,10,length.out=100)
+  gamma_list <- seq(1,10,length.out=100)
   U_list <- c()
   
   for (i in 1:length(gamma_list)) {
@@ -70,12 +70,10 @@ getGamma <- function(mu_hat, se_hat, Xtrain, Xtest, getSigma, getAlpha, Ufunc, c
     alpha_hat <- getAlpha_ts(mu_hat, se_hat, gamma_list[i], getSigma, getAlpha, Xtrain, Xtest)
     passChecks <- getChecks(alpha_hat, mode=c(crit))
     
-    print(sum(alpha_hat))
-    
     U_list[i] <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gamma_list[i], getSigma, passChecks, Ufunc)
   }
   
-  return(gamma_list[which.min(U_list)])
+  return(gamma_list[which.max(U_list)])
 }
 
 # Funcion para estimar la matriz de covarianzas entre los rendimientos de los 5
@@ -308,12 +306,8 @@ lines(mu_hat[,i], col="blue", ty="l")
 }
 
 
-
 rmse <- sqrt(mean((Xtest-mu_hat)^2))
 evals <- c(rmse=rmse)
-print('Seccion 2')
-cat('Rmse = ',evals)
-print('')
 
 # seccion 3 - utilidad media varianza
 # utilidad media-varianza, alfa_i positiva o negativa
@@ -327,8 +321,6 @@ ret <- getRet(alpha_hat, Xtest, passChecks)
 evals <- c(evals, retMV=ret)
 Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaMV, getSigmaMV, passChecks, Umv)
 evals <- c(evals,  Umv=Umv_rel)
-print('Seccion 3.1')
-cat('R = ',evals[2], '; Uv = ', evals[3], '\n')
 
 # utilidad media-varianza, alfa_i positiva
 
@@ -341,9 +333,6 @@ ret <- getRet(alpha_hat, Xtest, passChecks)
 evals <- c(evals, retMVPos=ret)
 Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaMVPos, getSigmaMVPos, passChecks, Umv)
 evals <- c(evals,  UmvPos=Umv_rel)
-print('Seccion 3.2')
-cat('R = ',evals[3], '; Uv = ', evals[4], '\n')
-print('')
 
 # seccion 4 -
 # utilidad log, alfa_i positiva o negativa
@@ -359,6 +348,23 @@ print(passChecks)
 Umv_rel <- getUEval(alpha_hat, mu_hat, se_hat, Xtrain, Xtest, gammaLog, getSigmaLog, passChecks, Ulog)
 evals <- c(evals,  UmvPosInt=Umv_rel)
 
+print('Gammas elegidos')
+print('')
+cat('GammaMV =', gammaMV )
+print('')
+cat('GammaMVPos =', gammaMVPos )
+print('')
+cat('GammaLog =', gammaLog)
+print('')
+
+print('Seccion 2')
+cat('Rmse = ',evals[1])
+print('')
+print('Seccion 3.1')
+cat('R = ',evals[2], '; Uv = ', evals[3], '\n')
+print('Seccion 3.2')
+cat('R = ',evals[3], '; Uv = ', evals[4], '\n')
+print('')
 print('Seccion 4')
 cat('R = ',evals[5], '; Uv = ', evals[6])
 
