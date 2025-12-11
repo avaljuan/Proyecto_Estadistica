@@ -76,6 +76,47 @@ getGamma <- function(mu_hat, se_hat, Xtrain, Xtest, getSigma, getAlpha, Ufunc, c
   return(gamma_list[which.max(U_list)])
 }
 
+getSharpe <- function(alpha_hat, Xtest, passChecks, rf = 0){
+  # retornos de portafolio por periodo
+  port_ret <- rowSums(alpha_hat * Xtest)
+  
+  # nos quedamos sólo con los periodos válidos
+  port_ret <- port_ret[passChecks]
+  
+  # si la sd es 0 o muy pequeña, devolvemos NA para evitar problemas
+  sd_ret <- sd(port_ret)
+  if (length(port_ret) < 2 || sd_ret == 0) return(NA)
+  
+  sharpe <- (mean(port_ret - rf)) / sd_ret
+  return(sharpe)
+}
+
+getGamma_Sharpe <- function(mu_hat, se_hat, Xtrain,
+                            getSigma, getAlpha, crit, rf = 0){
+  i80 <- as.integer(0.8*length(Xtrain[,1]))
+  
+  Xsub <- Xtrain[1:i80,]
+  Xval <- Xtrain[i80+1:length(Xtrain[,1]),]
+
+  gamma_list <- seq(1, 10, length.out = 50)  # por ejemplo
+  SR_list <- rep(NA, length(gamma_list))
+  
+  for (i in seq_along(gamma_list)) {
+    gamma_i <- gamma_list[i]
+    
+    # calculamos los pesos a lo largo del test
+    alpha_hat <- getAlpha_ts(mu_hat, se_hat, gamma_i,
+                             getSigma, getAlpha, Xsub, Xval)
+    
+    passChecks <- getChecks(alpha_hat, mode = crit)
+    
+    SR_list[i] <- getSharpe(alpha_hat, Xval, passChecks, rf)
+  }
+  
+  best_idx <- which.max(SR_list)
+  return(gamma_list[best_idx])
+}
+
 # Funcion para estimar la matriz de covarianzas entre los rendimientos de los 5
 # activos a partir de las desviaciones estándares (que vendran de su modelo Arima)
 # y el historico de rendimientos (que pueden usar para estimar correlaciones) 
@@ -83,18 +124,18 @@ getSigmaMV <- function(sig, Xpast){
   # INPUT: sig, vector en R^5 con desviaciones estandar de 5 activos al momento t
   #        Xpast, matriz en R^(T x 5) con rendimientos de 5 activos desde t=0 hasta t-1
   # OUTPUT: Sigma: matriz en 5 x 5 con covarianzas entre activos
-    
+  
   # Creamos la matriz de correlación R
-    
+  
   R <- cor(Xpast)
-    
+  
   # Creamos la matriz diagonal D
-    
+  
   D <- diag(sig)
-    
+  
   #INSERTAR CONSTRUCCION DE MATRIZ DE COVARIANZAS 
   Sigma <- D %*% R %*% D
-    
+  
   return(Sigma)
 }
 
@@ -256,7 +297,7 @@ getAlphaLog <- function(mu,Sigma, gamma){
                gamma = gamma,
                mu_hat = mu,
                Sigma_hat = Sigma 
-               )                
+  )                
   
   # --- 5. RESULTADOS ---
   alphas <- res$pars
@@ -301,8 +342,8 @@ se_hat = res$se_hat
 # MAPE
 
 for (i in 1:5) {
-plot(as.data.frame(Xtest)[,i], ty="l")
-lines(mu_hat[,i], col="blue", ty="l")
+  plot(as.data.frame(Xtest)[,i], ty="l")
+  lines(mu_hat[,i], col="blue", ty="l")
 }
 
 
@@ -314,8 +355,9 @@ evals <- c(rmse=rmse)
 
 crit <- "sum1"
 #gammaMV <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaMV, getAlphaMV, Umv, crit)
+gammaMV <- getGamma_Sharpe(mu_hat, se_hat, Xtrain, getSigmaMV, getAlphaMV, crit)
 
-gammaMV <- 3
+#gammaMV <- 3
 
 alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaMV, getSigmaMV, getAlphaMV, Xtrain, Xtest)
 passChecks <- getChecks(alpha_hat, mode=crit)
@@ -328,8 +370,9 @@ evals <- c(evals,  Umv=Umv_rel)
 
 crit <- c("sum1","pos")
 #gammaMVPos <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaMVPos, getAlphaMVPos, Umv, crit)
+gammaMVPos <- getGamma_Sharpe(mu_hat, se_hat, Xtrain, Xtest,getSigmaMVPos, getAlphaMVPos, crit)
 
-gammaMVPos <- 3
+#gammaMVPos <- 3
 
 alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaMVPos, getSigmaMVPos, getAlphaMVPos, Xtrain, Xtest)
 passChecks <- getChecks(alpha_hat, mode=crit)
@@ -343,8 +386,9 @@ evals <- c(evals,  UmvPos=Umv_rel)
 
 crit <- "sum1"
 #gammaLog <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaLog, getAlphaLog, Ulog, crit)
+gammaLog <- getGamma_Sharpe(mu_hat, se_hat, Xtrain, Xtest, getSigmaLog, getAlphaLog, crit)
 
-gammaLog <- 3
+#gammaLog <- 3
 
 alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaLog, getSigmaLog, getAlphaLog, Xtrain, Xtest)
 passChecks <- getChecks(alpha_hat, mode=crit)
@@ -373,4 +417,3 @@ cat('R = ',evals[4], '; Uv = ', evals[5], '\n')
 print('')
 print('Seccion 4')
 cat('R = ',evals[6], '; Uv = ', evals[7])
-
