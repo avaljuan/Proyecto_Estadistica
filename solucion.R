@@ -313,7 +313,9 @@ evals <- c(rmse=rmse)
 # utilidad media-varianza, alfa_i positiva o negativa
 
 crit <- "sum1"
-gammaMV <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaMV, getAlphaMV, Umv, crit)
+#gammaMV <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaMV, getAlphaMV, Umv, crit)
+
+gammaLog <- 3
 
 alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaMV, getSigmaMV, getAlphaMV, Xtrain, Xtest)
 passChecks <- getChecks(alpha_hat, mode=crit)
@@ -325,7 +327,9 @@ evals <- c(evals,  Umv=Umv_rel)
 # utilidad media-varianza, alfa_i positiva
 
 crit <- c("sum1","pos")
-gammaMVPos <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaMVPos, getAlphaMVPos, Umv, crit)
+#gammaMVPos <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaMVPos, getAlphaMVPos, Umv, crit)
+
+gammaLog <- 3
 
 alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaMVPos, getSigmaMVPos, getAlphaMVPos, Xtrain, Xtest)
 passChecks <- getChecks(alpha_hat, mode=crit)
@@ -338,7 +342,9 @@ evals <- c(evals,  UmvPos=Umv_rel)
 # utilidad log, alfa_i positiva o negativa
 
 crit <- "sum1"
-gammaLog <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaLog, getAlphaLog, Ulog, crit)
+#gammaLog <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaLog, getAlphaLog, Ulog, crit)
+
+gammaLog <- 3
 
 alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaLog, getSigmaLog, getAlphaLog, Xtrain, Xtest)
 passChecks <- getChecks(alpha_hat, mode=crit)
