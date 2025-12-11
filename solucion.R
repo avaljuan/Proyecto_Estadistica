@@ -165,7 +165,7 @@ getSigmaMVPos <- function(sig, Xpast){
 
 # Funcion para optimizar la asignacion de cada activo dentro del portafolio
 # tomando en cuenta la utilidad Media-Varianza SIN posiciones cortas
-getAlphaMVPos <- function(mu,Sigma, gamma){
+getAlphaMVPos <- function(mu,Sigma,gamma){
   # INPUT: mu: vector en R^5 con los rendimientos esperados de los 5 activos para el periodo t
   #        Sigma: matriz en R^{5 x 5} con las covarianzas de los 5 activos
   #        gamma: valor en R que representa el apetito de riesgo. Entre mas bajo mas riesgo.
@@ -225,6 +225,16 @@ getSigmaLog <- function(sig, Xpast){
   return(Sigma)
 }
 
+# Función de restricción
+
+restNorm <- function(alpha,...) {
+  return(sum(alpha))
+}
+
+minFunc <- function(alpha, gamma, mu_hat, Sigma_hat) {
+  return(-Ulog(alpha, gamma, mu_hat, Sigma_hat))
+}
+
 # Funcion para optimizar la asignacion de cada activo dentro del portafolio
 # tomando en cuenta la utilidad log CON posiciones cortas
 getAlphaLog <- function(mu,Sigma, gamma){
@@ -234,36 +244,25 @@ getAlphaLog <- function(mu,Sigma, gamma){
   # OUTPUT: alpha: vector en R^5 con la asignación elegida para los 5 activos resultante de optimizar
   # U-log sujeto a que alpha sume a 1.
   
-  fn_obj <- function(alpha_reduced) {
-    # Reconstruimos el vector completo alpha (dimensión 5) a partir de 4 variables
-    # alpha_5 = 1 - sum(alpha_1...4)
-    alpha_full <- c(alpha_reduced, 1 - sum(alpha_reduced))
-    
-    term1 <- log(1 + sum(alpha_full * mu))
-    
-    # Riesgo: alpha^T * Sigma * alpha
-    risk_num <- t(alpha_full) %*% Sigma %*% alpha_full
-    risk_den <- (1 + sum(alpha_full * mu))^2
-    term2 <- (gamma / 2) * (risk_num / risk_den)
-    
-    util <- term1 - term2
-    
-    # Retornamos negativo para minimizar
-    return(-util) 
-  }
+  N <- length(mu)
+  alpha0 <- rep(1/N, N)
   
-  # Punto inicial: Portafolio equiponderado (1/5)
-  init_params <- rep(0.2, 4) 
+  res <- solnp(pars = alpha0,                 # Puntos de inicio
+               fun = minFunc,       # Función a minimizar
+               eqfun = restNorm, # Función de restricción de igualdad
+               eqB = c(1),      # El valor al que debe igualar (suma = 1)
+               LB = rep(-1, N),
+               UB = rep(2, N),
+               gamma = gamma,
+               mu_hat = mu,
+               Sigma_hat = Sigma 
+               )                
   
-  # Optimizamos usando Nelder-Mead (robusto para no lineales sin gradiente)
-  opt <- optim(par = init_params, fn = fn_obj, method = "Nelder-Mead")
+  # --- 5. RESULTADOS ---
+  alphas <- res$pars
   
-  # Recuperamos el alpha completo
-  alpha_opt <- c(opt$par, 1 - sum(opt$par))
-  
-  return(alpha_opt)
+  return(alphas)
 }
-
 
 # ... HASTA AQUI
 #############################################################################################
@@ -274,6 +273,7 @@ getAlphaLog <- function(mu,Sigma, gamma){
 ###############################################################
 library(rstudioapi)
 library(quadprog)
+library(Rsolnp)
 
 setwd(dirname(getActiveDocumentContext()$path))
 
@@ -315,7 +315,7 @@ evals <- c(rmse=rmse)
 crit <- "sum1"
 #gammaMV <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaMV, getAlphaMV, Umv, crit)
 
-gammaLog <- 3
+gammaMV <- 3
 
 alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaMV, getSigmaMV, getAlphaMV, Xtrain, Xtest)
 passChecks <- getChecks(alpha_hat, mode=crit)
@@ -329,7 +329,7 @@ evals <- c(evals,  Umv=Umv_rel)
 crit <- c("sum1","pos")
 #gammaMVPos <- getGamma(mu_hat, se_hat, Xtrain, Xtest, getSigmaMVPos, getAlphaMVPos, Umv, crit)
 
-gammaLog <- 3
+gammaMVPos <- 3
 
 alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaMVPos, getSigmaMVPos, getAlphaMVPos, Xtrain, Xtest)
 passChecks <- getChecks(alpha_hat, mode=crit)
@@ -369,8 +369,8 @@ print('')
 print('Seccion 3.1')
 cat('R = ',evals[2], '; Uv = ', evals[3], '\n')
 print('Seccion 3.2')
-cat('R = ',evals[3], '; Uv = ', evals[4], '\n')
+cat('R = ',evals[4], '; Uv = ', evals[5], '\n')
 print('')
 print('Seccion 4')
-cat('R = ',evals[5], '; Uv = ', evals[6])
+cat('R = ',evals[6], '; Uv = ', evals[7])
 
