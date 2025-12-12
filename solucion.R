@@ -31,6 +31,7 @@ getPred <- function(x_train, x_test_past){
   # INSERTAR ESTIMACION DE MODELO DE SERIES DE TIEMPO PARA MOMENTO T PARA UN ACTIVO
   
   # Entrenamos el modelo con todo el pasado
+  
   modelo <- auto.arima(x_train)
   
   datos_actuales <- c(x_train,x_test_past)
@@ -38,12 +39,15 @@ getPred <- function(x_train, x_test_past){
   nuevo_ajuste <- Arima(datos_actuales, model = modelo)
   
   # Pronóstico a un paso
+  
   fc <- forecast::forecast(nuevo_ajuste, h = 1)
   
   # Valor esperado (media) del pronóstico
+  
   mu_hat <- as.numeric(fc$mean[1])
   
   # Estimamos la desviación estándar a partir del intervalo del 80%
+  
   z80 <- qnorm(0.8)
   se_from_up <- (fc$upper[,"80%"][1] - fc$mean[1]) / z80
   se_from_lo <- (fc$mean[1] - fc$lower[,"80%"][1]) / z80
@@ -57,10 +61,15 @@ getPred <- function(x_train, x_test_past){
 
 getGamma <- function(mu_hat, se_hat, Xtrain, getSigma, getAlpha, crit){
   
+  # Partimos los datos de train en 80% entrenamiento y 20% validación
+  
   i80 <- as.integer(0.8*length(Xtrain[,1]))
   
   Xsub <- Xtrain[1:i80,]
   Xval <- Xtrain[(i80+1):length(Xtrain[,1]),]
+  
+  # Tomamos el gamma que nos de el máximo rendimiento total en la fase de
+  # validación
   
   gamma_list <- seq(1,20,length.out=100)
   R_list <- c()
@@ -99,7 +108,8 @@ getSigmaMV <- function(sig, Xpast){
   
   D <- diag(sig)
   
-  #INSERTAR CONSTRUCCION DE MATRIZ DE COVARIANZAS 
+  #Creamos la matriz de covarianza
+  
   Sigma <- D %*% R %*% D
   
   return(Sigma)
@@ -109,7 +119,7 @@ getSigmaMV <- function(sig, Xpast){
 # tomando en cuenta la utilidad Media-Varianza CON posiciones cortas
 
 # Resolvemos el problema de optimización cuadrática con los multiplicadores
-# de Lagrange (función solve.QP de la librería quadprog)
+# de Lagrange
 
 getAlphaMV <- function(mu,Sigma, gamma){
   # INPUT: mu: vector en R^5 con los rendimientos esperados de los 5 activos para el periodo t
@@ -118,27 +128,29 @@ getAlphaMV <- function(mu,Sigma, gamma){
   # OUTPUT: alpha: vector en R^5 con la asignación elegida para los 5 activos resultante de optimizar
   # U-MV sujeto a que alpha sume a 1.
   
-  # INSERTAR PASOS DE OPTIMIZACION
-  # Problema: Max (alpha^T * mu - (gamma/2) * alpha^T * Sigma * alpha)
-  # Equivalente a QP: Min ((gamma/2) * alpha^T * Sigma * alpha - mu^T * alpha)
-  # Sujeto a: sum(alpha) = 1
+  # Estamos ante un problema de optimización cuadrática con restricciones lineales
+  # min Q x = b sujeto a sum(x) = 1
+  # donde Q = gamma*Sigma, b = mu y x = alpha
+  # Para resolverlo utilizamos la función solve.QP de la librería quadprog
   
-  # Matriz cuadrática (D en quadprog es 2 * término cuadrático si no hay factor 1/2, 
-  # pero solve.QP minimiza 1/2 x^T D x. Nuestra función tiene gamma/2.
-  # Por lo tanto, pasamos gamma * Sigma como Dmat).
+  # Definimos las matrices del problema
   
-  Dmat <- gamma * Sigma
+  Q <- gamma*Sigma
+  b <- mu
   
-  # Vector lineal (-d^T b en solve.QP). Nosotros tenemos -mu^T alpha.
-  dvec <- mu
+  # Definimos las restricciones como una matriz que indica el término que
+  # multiplica a cada incógnita de nuestro sistema en las restricciones
+  # (solve.QP asume que todas las restricciones son lineales)
   
-  # Restricciones: Sum(alpha) = 1
-  # Amat^T * alpha >= bvec (o = bvec si meq > 0)
-  Amat <- matrix(1, nrow=length(mu), ncol=1) # Columna de 1s
-  bvec <- 1
+  A <- matrix(1, nrow=length(mu), ncol=1)
+  d <- 1
   
-  # Resolvemos QP (meq=1 indica que la primera restricción es de igualdad)
-  sol <- solve.QP(Dmat, dvec, Amat, bvec, meq=1)
+  # Resolvemos el problema cuadrático mediante solve.QP
+  
+  sol <- solve.QP(Q, b, A, d, meq=1)
+  
+  # Nota: El parámetro meq=1 se utiliza para indicar que la primera  
+  # restricción es de igualdad
   
   alpha <- sol$solution
   return(alpha)
@@ -166,7 +178,7 @@ getSigmaMVPos <- function(sig, Xpast){
   
   D <- diag(sig)
   
-  #INSERTAR CONSTRUCCION DE MATRIZ DE COVARIANZAS
+  #Creamos la matriz de covarianza
   
   Sigma <- D %*% R %*% D
   
@@ -187,27 +199,31 @@ getAlphaMVPos <- function(mu,Sigma,gamma){
   # OUTPUT: alpha: vector en R^5 con la asignación elegida para los 5 activos resultante de optimizar
   # U-MV sujeto a que alpha sume a 1 y alpha_i>0.
   
-  # INSERTAR PASOS DE OPTIMIZACION
-  n_assets <- length(mu)
+  # Estamos ante un problema de optimización cuadrática con restricciones lineales
+  # min Q x = b sujeto a sum(x) = 1 y x_i > 0 para todo i
+  # donde Q = gamma*Sigma, b = mu y x = alpha
+  # Para resolverlo utilizamos la función solve.QP de la librería quadprog
   
-  # Matriz y vector objetivo iguales al caso anterior
-  Dmat <- gamma * Sigma
-  dvec <- mu
+  # Definimos las matrices del problema
   
-  # Restricciones:
-  # 1. Sum(alpha) = 1 (Igualdad)
-  # 2. alpha_i >= 0   (Desigualdad, matriz identidad)
+  Q <- gamma*Sigma
+  b <- mu
   
-  A_sum <- matrix(1, nrow=n_assets, ncol=1)
-  A_pos <- diag(n_assets)
-  Amat <- cbind(A_sum, A_pos) # Combinamos restricciones
+  # Definimos las restricciones como una matriz que indica el término que
+  # multiplica a cada incógnita de nuestro sistema en las restricciones
   
-  bvec <- c(1, rep(0, n_assets)) # 1 para la suma, 0s para la positividad
+  A_ig <- matrix(1, nrow=length(mu), ncol=1)
+  A_des <- diag(length(mu))
   
-  # meq=1: la primera restricción (suma) es igualdad, el resto desigualdad
-  sol <- solve.QP(Dmat, dvec, Amat, bvec, meq=1)
+  A <- cbind(A_ig, A_des)
+  d <- c(1, rep(0, length(mu)))
+  
+  # Resolvemos el problema cuadrático mediante solve.QP
+  
+  sol <- solve.QP(Q, b, A, d, meq=1)
   
   alpha <- sol$solution
+  
   return(alpha)
 }
 
@@ -216,7 +232,7 @@ getAlphaMVPos <- function(mu,Sigma,gamma){
 # seccion 4 - 
 # utilidad log, alfa_i positiva o negativa
 ################################################
-gammaLog = 5 # INSERTAR VALOR EN REALES
+gammaLog = 10 # INSERTAR VALOR EN REALES
 
 # Funcion para estimar la matriz de covarianzas entre los rendimientos de los 5
 # activos a partir de las desviaciones estándares (que vendran de su modelo Arima)
@@ -234,7 +250,8 @@ getSigmaLog <- function(sig, Xpast){
   
   D <- diag(sig)
   
-  #INSERTAR CONSTRUCCION DE MATRIZ DE COVARIANZAS 
+  #Creamos la matriz de covarianza
+  
   Sigma <- D %*% R %*% D
   
   return(Sigma)
@@ -266,10 +283,10 @@ getAlphaLog <- function(mu,Sigma, gamma){
   N <- length(mu)
   alpha0 <- rep(1/N, N)
   
-  res <- solnp(pars = alpha0,                 # Puntos de inicio
-               fun = minFunc,       # Función a minimizar
+  res <- solnp(pars = alpha0,    # Puntos de inicio
+               fun = minFunc,    # Función a minimizar
                eqfun = restNorm, # Función de restricción de igualdad
-               eqB = c(1),      # El valor al que debe igualar (suma = 1)
+               eqB = c(1),       # El valor al que debe igualar (suma = 1)
                gamma = gamma,
                mu_hat = mu,
                Sigma_hat = Sigma 
@@ -351,8 +368,6 @@ evals <- c(evals,  UmvPos=Umv_rel)
 
 # seccion 4 -
 # utilidad log, alfa_i positiva o negativa
-
-gammaLog <- 10
 
 alpha_hat <- getAlpha_ts(mu_hat, se_hat, gammaLog, getSigmaLog, getAlphaLog, Xtrain, Xtest)
 passChecks <- getChecks(alpha_hat, mode="sum1")
