@@ -81,7 +81,7 @@ Ulog <- function(alpha, gamma, mu_hat, Sigma_hat){
   Er <- sum(alpha*mu_hat)
   logTerm <- log(1+Er)
   riskTerm <- (t(alpha)%*%Sigma_hat%*%alpha)[1,1] / (1+Er)^2
-  res <- logTerm -0.5*riskTerm
+  res <- logTerm -(gamma/2)*riskTerm
   
   return(res)
 }
